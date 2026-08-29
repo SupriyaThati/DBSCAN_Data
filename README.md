@@ -1,181 +1,229 @@
-# Merge — Smart Data Migration & Duplicate Detector
+# Merge — Smart Data Migration & Duplicate Detection
 
-Migrates customer records from an old MySQL database into a new one, and
-flags groups of records that are probably the same person (fuzzy name
-match + same phone/email + clustering) before they land in the new
-database. You review each group in the dashboard and choose **Merge into
-one** or **Keep separate**.
+A Flask-based data migration tool that transfers customer records from a legacy database to a new database while automatically identifying potential duplicate customers using fuzzy matching and machine learning clustering.
+
+Before migration, users can review suspected duplicate groups through a web dashboard and decide whether to merge records or keep them separate, helping maintain data quality in the target system.
 
 ---
 
-## 1. What's in this folder
+## Features
 
-```
+* Migrate customer data between databases
+* Detect potential duplicate customer records
+* Fuzzy matching on names using RapidFuzz
+* Email and phone-based similarity scoring
+* DBSCAN clustering for grouping related duplicate records
+* Interactive dashboard for duplicate review
+* Manual merge or keep-separate decisions
+* Demo mode with sample data for quick evaluation
+* Supports MySQL databases via PyMySQL
+
+---
+
+## How It Works
+
+### 1. Data Extraction
+
+Customer records are loaded from the source database.
+
+### 2. Data Normalization
+
+The system standardizes:
+
+* Names
+* Phone numbers
+* Email addresses
+
+to improve matching accuracy.
+
+### 3. Duplicate Detection
+
+A weighted similarity score is calculated using:
+
+| Field | Default Weight |
+| ----- | -------------- |
+| Name  | 35%            |
+| Phone | 35%            |
+| Email | 30%            |
+
+The project uses:
+
+* **RapidFuzz** for fuzzy string matching
+* **DBSCAN (Scikit-Learn)** for clustering related records
+
+This enables identification of both simple duplicate pairs and larger duplicate groups.
+
+### 4. Human Review
+
+Potential duplicate groups are displayed in the dashboard where users can:
+
+* Merge into one record
+* Keep records separate
+
+### 5. Migration
+
+Approved records are migrated to the target database.
+
+---
+
+## Project Structure
+
+```text
 migration_tool/
-├── app.py                 Flask backend + API routes
-├── migration_engine.py    Reads/writes the source & target databases
-├── duplicate_detector.py  The ML part — fuzzy matching + DBSCAN clustering
-├── config.py               ← YOU EDIT THIS
-├── schema.sql              SQL to create the customers table on real MySQL
+├── app.py                 # Flask backend and API routes
+├── migration_engine.py    # Source/target database operations
+├── duplicate_detector.py  # Duplicate detection logic
+├── config.py             # Configuration settings
+├── schema.sql            # Database schema
 ├── requirements.txt
-├── templates/index.html    Dashboard page
-├── static/css/style.css    Styling
-├── static/js/app.js        Dashboard behaviour
-└── sample_data/            Auto-created demo SQLite files (demo mode only)
+├── templates/
+│   └── index.html
+├── static/
+│   ├── css/style.css
+│   └── js/app.js
+└── sample_data/
 ```
 
 ---
 
-## 2. Run it right now (zero setup — demo mode)
+## Technology Stack
 
-The project ships with `DEMO_MODE = True`, so it runs immediately on
-sample data — no MySQL server needed. This is the fastest way to see it
-working.
+### Backend
 
-```bash
-cd migration_tool
-python3 -m venv venv
-source venv/bin/activate          # Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python3 app.py
-```
+* Python
+* Flask
 
-Open **http://127.0.0.1:5000**, click **Scan for duplicates**, review the
-groups, click **Migrate to new database**. Click **Reload demo data** any
-time to reset the sample records.
+### Data Processing
+
+* Pandas
+
+### Machine Learning
+
+* Scikit-Learn (DBSCAN)
+
+### Similarity Matching
+
+* RapidFuzz
+
+### Database
+
+* MySQL
+* PyMySQL
+
+### Frontend
+
+* HTML
+* CSS
+* JavaScript
 
 ---
 
-## 3. Changes you need to make to use YOUR real MySQL data
+## Installation
 
-This is the part you asked about — here's exactly what to edit after you
-unzip the project.
-
-### Step 1 — Create the database & table on both MySQL servers
-
-Edit `schema.sql` if your real table has different columns, then run it
-against both your old and new database:
+### Clone the Repository
 
 ```bash
-mysql -u root -p old_company_db < schema.sql
-mysql -u root -p new_company_db < schema.sql
+git clone https://github.com/yourusername/merge-smart-data-migration.git
+cd merge-smart-data-migration
 ```
 
-### Step 2 — Edit `config.py`
+### Create a Virtual Environment
 
-Open `config.py` and change two things:
-
-**a) Turn off demo mode:**
-
-```python
-DEMO_MODE = False
+```bash
+python -m venv venv
 ```
 
-**b) Fill in your real connection details:**
+Activate:
 
-```python
-SOURCE_DB = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "your_real_password",
-    "database": "old_company_db",
-}
+**Linux / macOS**
 
-TARGET_DB = {
-    "host": "localhost",
-    "port": 3306,
-    "user": "root",
-    "password": "your_real_password",
-    "database": "new_company_db",
-}
+```bash
+source venv/bin/activate
 ```
 
-*(Tip: instead of hardcoding the password, you can set environment
-variables `SRC_DB_PASSWORD` / `TGT_DB_PASSWORD` before running
-`python3 app.py` — `config.py` already reads those if present.)*
+**Windows**
 
-### Step 3 — Match the table & columns to your real schema
-
-Still in `config.py`:
-
-```python
-TABLE_NAME = "customers"        # change if your table is named differently
-ID_COLUMN = "id"                 # your primary key column
-
-MATCH_COLUMNS = {
-    "name":  {"weight": 0.35},
-    "phone": {"weight": 0.35},
-    "email": {"weight": 0.30},
-}
+```bash
+venv\Scripts\activate
 ```
 
-If your columns are called something else (e.g. `full_name`,
-`mobile_number`), rename the keys in `MATCH_COLUMNS` to match — and
-also update the column names referenced in `duplicate_detector.py`'s
-`record_similarity()` function if you renamed a *key*, not just a
-value (the keys are what everything else reads).
-
-### Step 4 — Reinstall dependencies (adds the MySQL driver)
+### Install Dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-`PyMySQL` is already listed in `requirements.txt`, so this step is only
-needed if you installed packages before this file was updated.
-
-### Step 5 — Run it
+### Run the Application
 
 ```bash
-python3 app.py
+python app.py
 ```
 
-The status pills in the top-right of the dashboard will show
-**source: connected** / **target: connected** once MySQL is reachable.
-If you see **offline**, double check host/port/user/password and that
-MySQL is actually running.
+Open:
+
+```text
+http://127.0.0.1:5000
+```
 
 ---
 
-## 4. Tuning the duplicate detector
+## Configuration
 
-In `config.py`:
+Database connections and duplicate-detection settings can be configured through `config.py`.
 
-- `DUPLICATE_THRESHOLD` (default `0.75`) — raise it (e.g. `0.85`) to only
-  flag very close matches; lower it to catch looser matches too.
-- `MATCH_COLUMNS` weights — increase `phone`'s weight if phone numbers
-  are your most trustworthy signal, for example.
+Examples include:
 
-The matching logic itself lives in `duplicate_detector.py`:
-- `normalize_name` / `normalize_phone` / `normalize_email` clean up each
-  field before comparing (strips extra spaces, punctuation, country
-  codes, etc.) — edit these if your data has other quirks (e.g. Indian
-  numbers sometimes include a `+91` prefix, already handled).
-- `record_similarity()` computes the weighted score and the "reasons"
-  shown in the UI.
-- `find_duplicate_clusters()` runs scikit-learn's `DBSCAN` to group
-  records — this is what lets three or more records (like the 101/102/103
-  example) show up as one group instead of three separate pairs.
+* Source database credentials
+* Target database credentials
+* Matching weights
+* Duplicate detection threshold
+* Table and column mappings
 
 ---
 
-## 5. Safety notes
+## Sample Use Case
 
-- **Nothing writes to the target database until you click "Migrate to new
-  database."** Scanning is read-only.
-- "Merge into one" keeps the *first* record in each group and skips the
-  rest — it does not currently combine field values from multiple
-  records into one. If you need smarter merging (e.g. keep whichever
-  record has the most complete data), that logic goes in
-  `app.py`'s `api_migrate()` function.
-- This is a local development tool (Flask's built-in server). Don't
-  expose it to the internet as-is — if you ever deploy it, put it behind
-  a real WSGI server (gunicorn) and add authentication.
+A company is migrating customer data from a legacy CRM system to a new platform.
+
+Before migration, the tool identifies records such as:
+
+```text
+John Smith
+John A. Smith
+J. Smith
+```
+
+with matching phone numbers or emails and groups them as likely duplicates.
+
+Users review these suggestions and decide whether to merge or retain the records before migration proceeds.
 
 ---
 
-## 6. Stack
+## Future Enhancements
 
-Python · MySQL (PyMySQL) · Pandas · Scikit-learn (DBSCAN) · RapidFuzz ·
-Flask · vanilla HTML/CSS/JS
+* Automated field-level merge strategies
+* Merge history and audit logs
+* Authentication and role-based access
+* Batch migration scheduling
+* Advanced duplicate detection models
+* Support for additional database systems
+
+---
+
+## Key Learning Outcomes
+
+This project demonstrates:
+
+* Data migration workflows
+* Data cleansing and normalization
+* Fuzzy matching techniques
+* Machine learning clustering
+* Backend API development with Flask
+* Database integration using MySQL
+* Interactive review workflows for data quality management
+
+---
+
+## License
+
+This project is available for educational and portfolio purposes.
