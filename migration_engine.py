@@ -1,18 +1,3 @@
-"""
-migration_engine.py
-====================
-Handles the actual "move data from old DB to new DB" part.
-
-- In DEMO_MODE (config.DEMO_MODE = True) it reads/writes local SQLite
-  files under sample_data/ so the whole project runs with zero setup.
-- With DEMO_MODE = False it talks to two real MySQL servers via
-  pymysql, using the credentials in config.py.
-
-Either way, the rest of the app (duplicate_detector.py, app.py) only
-ever calls the functions below, so switching modes requires no other
-code changes.
-"""
-
 import os
 import sqlite3
 import pandas as pd
@@ -23,11 +8,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SAMPLE_DIR = os.path.join(BASE_DIR, "sample_data")
 OLD_DB_PATH = os.path.join(SAMPLE_DIR, "old.db")
 NEW_DB_PATH = os.path.join(SAMPLE_DIR, "new.db")
-
-
-# ---------------------------------------------------------------
-# Connection helpers
-# ---------------------------------------------------------------
 
 def _mysql_connect(db_cfg):
     import pymysql
@@ -55,11 +35,6 @@ def test_connection(which="source"):
         return True, f"Connected to {db_cfg['database']} @ {db_cfg['host']}"
     except Exception as e:
         return False, str(e)
-
-
-# ---------------------------------------------------------------
-# Read source records
-# ---------------------------------------------------------------
 
 def fetch_source_records():
     """Returns a list[dict] of every row in the source customers table."""
@@ -98,11 +73,6 @@ def fetch_target_records():
     finally:
         conn.close()
 
-
-# ---------------------------------------------------------------
-# Write to target (the actual "migrate" step)
-# ---------------------------------------------------------------
-
 def migrate_records(records: list[dict], skip_ids: set | None = None):
     """
     Writes `records` into the target DB, skipping any whose ID_COLUMN
@@ -117,14 +87,6 @@ def migrate_records(records: list[dict], skip_ids: set | None = None):
 
     df = pd.DataFrame(to_write)
 
-    # config.ID_COLUMN (e.g. "id") only identifies a record within the
-    # SOURCE data for this scan/migrate cycle (matching up duplicate
-    # clusters, skip_ids, etc). It is NOT a target-database identity -
-    # the target table's id column is PRIMARY KEY / AUTO_INCREMENT and
-    # is meant to assign its own fresh values. Forwarding the source id
-    # collides as soon as you migrate more than once (a second upload,
-    # or the same upload again) since both batches start counting from
-    # the same numbers.
     insert_df = df.drop(columns=[config.ID_COLUMN], errors="ignore")
 
     if config.DEMO_MODE:
@@ -146,11 +108,6 @@ def migrate_records(records: list[dict], skip_ids: set | None = None):
         return len(insert_df)
     finally:
         conn.close()
-
-
-# ---------------------------------------------------------------
-# Demo data seeding
-# ---------------------------------------------------------------
 
 def seed_demo_data(reset=True):
     """Creates sample_data/old.db pre-loaded with messy sample records,
