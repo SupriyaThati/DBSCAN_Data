@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Merge — Smart Data Migration &amp; Duplicate Detector</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<div class="grain"></div>
+
+<header class="topbar">
+  <div class="topbar__inner">
+    <div class="brand">
+      <span class="brand__mark">
+        <svg viewBox="0 0 32 32" width="22" height="22" aria-hidden="true">
+          <circle cx="10" cy="10" r="6" fill="var(--sage-500)" opacity="0.55"/>
+          <circle cx="20" cy="10" r="6" fill="var(--sage-600)" opacity="0.75"/>
+          <circle cx="15" cy="19" r="6" fill="var(--sage-700)"/>
+        </svg>
+      </span>
+      <span class="brand__name">Merge</span>
+    </div>
+
+    <nav class="topbar__status" id="status-pills">
+      <span class="pill pill--muted" id="pill-mode">checking mode…</span>
+      <span class="pill pill--muted" id="pill-source">source: —</span>
+      <span class="pill pill--muted" id="pill-target">target: —</span>
+    </nav>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============ HERO ============ -->
+  <section class="hero">
+    <div class="hero__copy">
+      <p class="eyebrow">MySQL → MySQL migration, with a duplicate check built in</p>
+      <h1 class="hero__title">
+        Move your data.<br>
+        <span class="hero__title-accent">Leave the duplicates behind.</span>
+      </h1>
+      <p class="hero__sub">
+        Merge scans every record before it lands in your new database, fuzzy-matches
+        names, phones and emails, and groups the ones that look like the same person —
+        so you decide what gets merged, not a script.
+      </p>
+      <div class="hero__actions">
+        <button class="btn btn--primary" id="btn-scan">
+          <span class="btn__label">Scan for duplicates</span>
+          <svg class="btn__spinner" width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="30" stroke-linecap="round"/></svg>
+        </button>
+        <a href="#source-card" class="btn btn--ghost">Upload your own data</a>
+      </div>
+      <p class="hero__hint" id="demo-hint"></p>
+    </div>
+
+    <div class="hero__visual" aria-hidden="true">
+      <div class="convergence" id="convergence">
+        <div class="convergence__record" style="--i:0">
+          <span class="convergence__id">101</span>
+          <span class="convergence__name">Rahul Kumar</span>
+          <span class="convergence__meta">9876543210</span>
+        </div>
+        <div class="convergence__record" style="--i:1">
+          <span class="convergence__id">102</span>
+          <span class="convergence__name">Rahul&nbsp; Kumar</span>
+          <span class="convergence__meta">9876543210</span>
+        </div>
+        <div class="convergence__record" style="--i:2">
+          <span class="convergence__id">103</span>
+          <span class="convergence__name">R. Kumar</span>
+          <span class="convergence__meta">9876543210</span>
+        </div>
+        <svg class="convergence__lines" viewBox="0 0 320 220">
+          <path class="cline" d="M70,40 C160,40 160,110 210,110" />
+          <path class="cline" d="M70,110 C160,110 160,110 210,110" />
+          <path class="cline" d="M70,180 C160,180 160,110 210,110" />
+        </svg>
+        <div class="convergence__badge">
+          <span class="convergence__pct" id="convergence-pct">0%</span>
+          <span class="convergence__pct-label">similarity</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DATA SOURCE ============ -->
+  <section class="source-section">
+    <div class="section-head">
+      <h2>Your dataset</h2>
+      <p>Upload any CSV or Excel export — Merge figures out which column is the name, phone and email.</p>
+    </div>
+
+    <div class="source-card" id="source-card">
+      <div class="source-card__idle" id="source-idle">
+        <label class="dropzone" for="file-input" id="dropzone">
+          <svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true">
+            <path d="M14 4v13M14 4l-5 5M14 4l5 5" fill="none" stroke="var(--sage-500)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M5 19v3a2 2 0 002 2h14a2 2 0 002-2v-3" fill="none" stroke="var(--sage-400)" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          <span class="dropzone__title">Drop a .csv or .xlsx file, or click to browse</span>
+          <span class="dropzone__sub">Any column names work — you'll confirm the mapping next.</span>
+        </label>
+        <input type="file" id="file-input" accept=".csv,.xlsx,.xls" hidden>
+        <p class="source-card__or">— or —</p>
+        <button class="btn btn--ghost btn--sm" id="btn-use-demo">Use the sample demo data instead</button>
+      </div>
+
+      <div class="source-card__mapping" id="source-mapping" hidden>
+        <div class="mapping__head">
+          <div>
+            <p class="mapping__filename" id="mapping-filename"></p>
+            <p class="mapping__rowcount" id="mapping-rowcount"></p>
+          </div>
+          <button class="btn btn--ghost btn--sm" id="btn-cancel-upload">Choose a different file</button>
+        </div>
+
+        <div class="mapping__fields">
+          <label class="mapping__field">
+            <span>Name column</span>
+            <select id="map-name"></select>
+          </label>
+          <label class="mapping__field">
+            <span>Phone column</span>
+            <select id="map-phone"></select>
+          </label>
+          <label class="mapping__field">
+            <span>Email column</span>
+            <select id="map-email"></select>
+          </label>
+        </div>
+
+        <div class="table-wrap mapping__preview">
+          <table class="preview-table" id="mapping-preview-table">
+            <thead><tr id="mapping-preview-head"></tr></thead>
+            <tbody id="mapping-preview-body"></tbody>
+          </table>
+        </div>
+
+        <button class="btn btn--primary" id="btn-confirm-mapping">Use this data</button>
+      </div>
+
+      <div class="source-card__active" id="source-active" hidden>
+        <div class="active-pill">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="var(--sage-500)" stroke-width="1.5"/><path d="M5 8l2 2 4-4" fill="none" stroke="var(--sage-600)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="active-source-label">Using demo data</span>
+        </div>
+        <button class="btn btn--ghost btn--sm" id="btn-change-source">Change data source</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ STATS STRIP ============ -->
+  <section class="stats" id="stats" aria-label="Scan results">
+    <div class="stat-card">
+      <span class="stat-card__label">Total records</span>
+      <span class="stat-card__value" id="stat-total">—</span>
+    </div>
+    <div class="stat-card stat-card--warn">
+      <span class="stat-card__label">Flagged as duplicates</span>
+      <span class="stat-card__value" id="stat-dupes">—</span>
+    </div>
+    <div class="stat-card stat-card--good">
+      <span class="stat-card__label">Clean records</span>
+      <span class="stat-card__value" id="stat-clean">—</span>
+    </div>
+    <div class="stat-card">
+      <span class="stat-card__label">Groups found</span>
+      <span class="stat-card__value" id="stat-groups">—</span>
+    </div>
+  </section>
+
+  <!-- ============ CLUSTERS ============ -->
+  <section class="clusters-section">
+    <div class="section-head">
+      <h2>Possible duplicate groups</h2>
+      <p>Review each group, then choose to merge it into one record or keep every record as-is.</p>
+    </div>
+
+    <div id="clusters-empty" class="empty-state">
+      <svg width="40" height="40" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="18" fill="none" stroke="var(--sage-300)" stroke-width="2"/>
+        <path d="M13 20l5 5 9-10" fill="none" stroke="var(--sage-500)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p>Run a scan to see duplicate groups here.</p>
+    </div>
+
+    <div id="clusters-list" class="clusters-list"></div>
+
+    <div class="migrate-bar" id="migrate-bar" hidden>
+      <p><strong id="migrate-summary">0 groups reviewed</strong> — the rest of your decisions default to “keep separate.”</p>
+      <div class="migrate-bar__actions">
+        <button class="btn btn--ghost btn--on-dark" id="btn-export-csv">Download cleaned CSV</button>
+        <button class="btn btn--primary" id="btn-migrate">Migrate to new database</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HOW IT WORKS ============ -->
+  <section class="how">
+    <div class="section-head">
+      <h2>How a migration runs</h2>
+      <p>Four steps, every time — nothing is written to the target database until you say so.</p>
+    </div>
+    <ol class="how__steps">
+      <li class="how__step">
+        <span class="how__num">01</span>
+        <h3>Read the source</h3>
+        <p>Pulls every row from the old MySQL <code>customers</code> table with pandas.</p>
+      </li>
+      <li class="how__step">
+        <span class="how__num">02</span>
+        <h3>Normalize &amp; compare</h3>
+        <p>Cleans up names, phones and emails, then scores every pair with fuzzy matching.</p>
+      </li>
+      <li class="how__step">
+        <span class="how__num">03</span>
+        <h3>Cluster</h3>
+        <p>Scikit-learn's DBSCAN groups records into duplicate clusters — not just pairs.</p>
+      </li>
+      <li class="how__step">
+        <span class="how__num">04</span>
+        <h3>You decide</h3>
+        <p>Merge a group into one record, or keep every record — then write to the new DB.</p>
+      </li>
+    </ol>
+  </section>
+
+  <!-- ============ TARGET PREVIEW ============ -->
+  <section class="preview-section">
+    <div class="section-head">
+      <h2>New database preview</h2>
+      <p>What's actually landed in the target table so far.</p>
+    </div>
+    <div class="table-wrap">
+      <table class="preview-table" id="target-table">
+        <thead>
+          <tr><th>ID</th><th>Name</th><th>Phone</th><th>Email</th></tr>
+        </thead>
+        <tbody id="target-table-body">
+          <tr><td colspan="4" class="preview-table__empty">No records migrated yet.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer class="footer">
+  <div class="footer__stack">
+    <span class="chip">Python</span>
+    <span class="chip">MySQL</span>
+    <span class="chip">Pandas</span>
+    <span class="chip">Scikit-learn</span>
+    <span class="chip">Flask</span>
+  </div>
+  <p class="footer__note">Built as a local tool — nothing here leaves your machine.</p>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
