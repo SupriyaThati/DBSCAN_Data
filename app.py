@@ -1,12 +1,3 @@
-"""
-app.py
-======
-Flask backend for the Smart Data Migration & Duplicate Detector dashboard.
-
-Run with:  python app.py
-Then open: http://127.0.0.1:5000
-"""
-
 import io
 import csv
 
@@ -20,14 +11,8 @@ import file_ingest
 app = Flask(__name__)
 app.config["SECRET_KEY"] = config.SECRET_KEY
 
-# In-memory scan cache so /api/migrate can reuse the last scan's
-# clusters without re-running the ML step. Fine for a single-user
-# local tool; swap for a real session/store if you deploy this.
 _last_scan = {"records": [], "clusters": []}
 
-# Holds a user-uploaded dataset once confirmed, so /api/scan can use
-# it instead of the configured source database. Cleared by
-# /api/clear-upload to go back to DB mode.
 _uploaded = {"active": False, "columns": [], "records": [], "filename": None}
 
 
@@ -74,8 +59,6 @@ def api_upload():
     guess = file_ingest.guess_column_map(columns)
     preview = df.head(5).fillna("").astype(str).to_dict(orient="records")
 
-    # stash the raw dataframe in memory keyed by filename so
-    # /api/confirm-mapping can rebuild records without re-uploading
     _uploaded["_pending_df"] = df
     _uploaded["filename"] = request.files["file"].filename
 
