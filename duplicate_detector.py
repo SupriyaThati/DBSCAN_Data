@@ -1,31 +1,3 @@
-"""
-duplicate_detector.py
-======================
-The "small ML part" of the project.
-
-Pipeline:
-  1. Normalize each field (name / phone / email) so trivial formatting
-     differences don't count against a match.
-  2. BLOCKING: instead of scoring every possible pair of records
-     (O(n^2)), group records into "blocks" that share a normalized
-     phone, email, or name fragment, and only generate candidate
-     pairs from records that land in the same block. This is the
-     standard "blocking" technique used in real-world record-linkage
-     / de-duplication systems to avoid comparing everything to
-     everything.
-  3. Score only the candidate pairs with the existing weighted
-     fuzzy-string similarity (rapidfuzz) -> a sparse similarity matrix
-     (all non-candidate pairs are simply assumed dissimilar, since
-     they shared no blocking key).
-  4. Convert similarity -> distance and run scikit-learn's DBSCAN to
-     group records into duplicate "clusters" (this is the clustering
-     piece — it also naturally handles groups of 3+ duplicates, not
-     just pairs). This step is unchanged from before.
-  5. Return clusters above the configured threshold, with a
-     human-readable "reason" for each match (same phone / similar
-     name / same email), same shape as the mock-up you sent.
-"""
-
 import re
 import time
 import numpy as np
@@ -33,25 +5,19 @@ from rapidfuzz import fuzz
 from sklearn.cluster import DBSCAN
 
 import config
-
-
-# ---------------------------------------------------------------
-# Normalization helpers
-# ---------------------------------------------------------------
-
 def normalize_name(name: str) -> str:
     if not name:
         return ""
     name = name.lower().strip()
-    name = re.sub(r"[.\-_]", " ", name)          # "R. Kumar" -> "r kumar"
-    name = re.sub(r"\s+", " ", name)               # collapse double spaces
+    name = re.sub(r"[.\-_]", " ", name)          
+    name = re.sub(r"\s+", " ", name)               
     return name.strip()
 
 
 def normalize_phone(phone: str) -> str:
     if not phone:
         return ""
-    digits = re.sub(r"\D", "", phone)              # strip spaces/dashes/+91 etc
+    digits = re.sub(r"\D", "", phone)              
     return digits[-10:] if len(digits) >= 10 else digits
 
 
@@ -68,9 +34,6 @@ NORMALIZERS = {
 }
 
 
-# ---------------------------------------------------------------
-# Pairwise similarity
-# ---------------------------------------------------------------
 
 def field_similarity(a: str, b: str) -> float:
     """0-1 fuzzy similarity between two normalized strings."""
@@ -104,33 +67,8 @@ def record_similarity(rec_a: dict, rec_b: dict) -> tuple[float, list[str]]:
     return total, reasons
 
 
-# ---------------------------------------------------------------
-# Blocking / candidate generation
-# ---------------------------------------------------------------
-#
-# Comparing every record against every other record is O(n^2) - at
-# config.MAX_SCAN_RECORDS that can be tens of thousands of pairwise
-# similarity calculations for a single scan. In practice the vast
-# majority of those pairs are obviously not duplicates (different
-# name, different phone, different email), so we never need to score
-# them at all.
-#
-# "Blocking" fixes this: records are bucketed into small groups
-# ("blocks") that share some normalized value that real duplicates are
-# very likely to share (same phone, same email, same first name,
-# same first few letters of the full name). Only records that land in
-# the same block are compared to each other. This trades a small
-# amount of recall (two duplicates that share *nothing* normalizable
-# would be missed) for a large drop in the number of comparisons,
-# which is the standard approach used by real record-linkage tools.
-#
-# A record can - and usually does - belong to several blocks, and a
-# candidate pair only needs to show up in one block to get compared.
-# Blank/near-blank values are never used as a block key, otherwise
-# every record missing a phone (say) would land in one giant block and
-# defeat the whole point (see MIN_BLOCK_KEY_LENGTH below).
 
-MIN_BLOCK_KEY_LENGTH = 3  # keys shorter than this are too common to be useful
+MIN_BLOCK_KEY_LENGTH = 3  
 
 
 def _record_blocking_keys(record: dict) -> set[tuple[str, str]]:
@@ -150,24 +88,19 @@ def _record_blocking_keys(record: dict) -> set[tuple[str, str]]:
 
     keys = set()
 
-    # Phone-based blocks. Guard against short/blank numbers turning
-    # into one enormous block.
+
     if len(phone_norm) >= 6:
         keys.add(("phone", phone_norm))
         keys.add(("phone_suffix", phone_norm[-6:]))
 
-    # Email-based blocks (full address, and just the username part so
-    # "rahul@gmail.com" and "rahul@yahoo.com" still land together).
+
     if "@" in email_norm:
         local, _, domain = email_norm.partition("@")
         keys.add(("email", email_norm))
         if len(local) >= MIN_BLOCK_KEY_LENGTH:
             keys.add(("email_user", local))
 
-    # Name-based blocks: first token ("rahul" from "rahul kumar") and
-    # a prefix of the whole name with spaces stripped, so "Rahul
-    # Kumar" and "R. Kumar" can still meet in the "kuma../rahu.." style
-    # buckets even when phone/email were both mistyped.
+
     if name_norm:
         tokens = name_norm.split()
         first_token = tokens[0] if tokens else ""
@@ -194,7 +127,7 @@ def _generate_candidate_pairs(records: list[dict]) -> set[tuple[int, int]]:
     candidate_pairs: set[tuple[int, int]] = set()
     for member_idxs in blocks.values():
         if len(member_idxs) < 2:
-            continue  # nobody else in this block - no candidates from it
+            continue  
         for x, i in enumerate(member_idxs):
             for j in member_idxs[x + 1:]:
                 candidate_pairs.add((i, j) if i < j else (j, i))
@@ -202,10 +135,6 @@ def _generate_candidate_pairs(records: list[dict]) -> set[tuple[int, int]]:
     return candidate_pairs
 
 
-# Stats from the most recent find_duplicate_clusters() call, so the
-# app can report real (never fabricated) numbers about how much work
-# blocking actually saved. Purely informational - nothing else reads
-# or depends on this.
 _last_stats = {}
 
 
@@ -214,10 +143,6 @@ def get_last_scan_stats() -> dict:
     find_duplicate_clusters() call (empty dict if it hasn't run yet)."""
     return dict(_last_stats)
 
-
-# ---------------------------------------------------------------
-# Clustering
-# ---------------------------------------------------------------
 
 def find_duplicate_clusters(records: list[dict]):
     """
@@ -239,15 +164,9 @@ def find_duplicate_clusters(records: list[dict]):
 
     start = time.perf_counter()
 
-    # BLOCKING: only generate candidate pairs from records that share
-    # a normalized phone/email/name fragment, instead of every
-    # possible pair (the old `for i ... for j in range(i+1, n)` loop).
     candidate_pairs = _generate_candidate_pairs(records)
 
-    # Build similarity matrix - but only fill in scores for candidate
-    # pairs. Every pair that never shared a block is left at 0
-    # similarity (i.e. assumed not a duplicate), which is the
-    # trade-off blocking makes in exchange for skipping the comparison.
+
     sim_matrix = np.eye(n)
     reason_lookup = {}
     for i, j in candidate_pairs:
@@ -257,7 +176,7 @@ def find_duplicate_clusters(records: list[dict]):
         if sim >= config.DUPLICATE_THRESHOLD:
             reason_lookup[(i, j)] = reasons
 
-    # Convert to distance matrix for DBSCAN (precomputed metric)
+
     distance_matrix = 1 - sim_matrix
     np.fill_diagonal(distance_matrix, 0)
 
@@ -267,7 +186,7 @@ def find_duplicate_clusters(records: list[dict]):
         metric="precomputed",
     ).fit(distance_matrix)
 
-    labels = clustering.labels_  # -1 = not a duplicate of anything
+    labels = clustering.labels_ 
 
     clusters = []
     for cluster_id in sorted(set(labels)):
@@ -277,7 +196,7 @@ def find_duplicate_clusters(records: list[dict]):
         if len(member_idxs) < 2:
             continue
 
-        # avg pairwise similarity within the cluster
+
         pair_sims = [
             sim_matrix[a, b]
             for x, a in enumerate(member_idxs)
@@ -285,7 +204,7 @@ def find_duplicate_clusters(records: list[dict]):
         ]
         avg_sim = float(np.mean(pair_sims)) if pair_sims else 0.0
 
-        # union of reasons across all pairs in the cluster
+
         all_reasons = set()
         for x, a in enumerate(member_idxs):
             for b in member_idxs[x + 1:]:
@@ -307,7 +226,6 @@ def find_duplicate_clusters(records: list[dict]):
             "reasons": sorted(all_reasons),
         })
 
-    # Highest-confidence groups first
     clusters.sort(key=lambda c: c["avg_similarity"], reverse=True)
 
     duplicate_record_count = sum(len(c["records"]) for c in clusters)
